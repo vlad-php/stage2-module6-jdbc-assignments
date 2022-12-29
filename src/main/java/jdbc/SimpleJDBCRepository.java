@@ -13,7 +13,7 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 public class SimpleJDBCRepository {
-    private final CustomDataSource dataSource = CustomDataSource.getInstance();
+    private final CustomDataSource sourseConnection = CustomDataSource.getInstance();
 
     private Connection connection = null;
     private PreparedStatement ps = null;
@@ -47,11 +47,11 @@ public class SimpleJDBCRepository {
 
     public Long createUser(User user) {
         try {
-            Connection connection = dataSource.getConnection();
+            Connection connection = sourseConnection.getConnection();
             ps = connection.prepareStatement(createUserSQL);
-            ps.setString(1,user.getFirstName());
-            ps.setString(2,user.getLastName());
-            ps.setInt(3,user.getAge());
+            ps.setString(1, user.getFirstName());
+            ps.setString(2, user.getLastName());
+            ps.setInt(3, user.getAge());
             ps.execute();
             ResultSet generatedKeys = ps.getGeneratedKeys();
             return generatedKeys.next() ? generatedKeys.getLong(1) : null;
@@ -61,11 +61,11 @@ public class SimpleJDBCRepository {
     }
     public User findUserById(Long userId) {
         try {
-            Connection connection = dataSource.getConnection();
+            Connection connection = sourseConnection.getConnection();
             ps = connection.prepareStatement(findUserByIdSQL);
             ps.setLong(1,userId);
             ResultSet resultSet = ps.executeQuery();
-            return resultSet.next() ? map(resultSet) : null;
+            return resultSet.next() ? parsUser(resultSet) : null;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -73,11 +73,11 @@ public class SimpleJDBCRepository {
 
     public User findUserByName(String userName) {
         try {
-            Connection connection = dataSource.getConnection();
+            Connection connection = sourseConnection.getConnection();
             ps = connection.prepareStatement(findUserByNameSQL);
             ps.setString(1,userName);
             ResultSet resultSet = ps.executeQuery();
-            return resultSet.next() ? map(resultSet) : null;
+            return resultSet.next() ? parsUser(resultSet) : null;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -85,12 +85,12 @@ public class SimpleJDBCRepository {
 
     public List<User> findAllUser() {
         try {
-            Connection connection = dataSource.getConnection();
+            Connection connection = sourseConnection.getConnection();
             ps = connection.prepareStatement(findAllUserSQL);
             List<User> users = new ArrayList<>();
             ResultSet resultSet = ps.executeQuery();
             while (resultSet.next()) {
-                users.add(map(resultSet));
+                users.add(parsUser(resultSet));
             }
             return users;
         }catch (SQLException e){
@@ -100,7 +100,7 @@ public class SimpleJDBCRepository {
 
     public User updateUser(User user) {
         try {
-            Connection connection = dataSource.getConnection();
+            Connection connection = sourseConnection.getConnection();
             ps = connection.prepareStatement(updateUserSQL);
             ps.setString(1, user.getFirstName());
             ps.setString(2, user.getLastName());
@@ -114,7 +114,7 @@ public class SimpleJDBCRepository {
 
     public void deleteUser(Long userId) {
         try {
-            Connection connection = dataSource.getConnection();
+            Connection connection = sourseConnection.getConnection();
             ps = connection.prepareStatement(deleteUser);
             ps.setLong(1, userId);
             ps.executeUpdate();
@@ -122,7 +122,7 @@ public class SimpleJDBCRepository {
             throw new RuntimeException(e);
         }
     }
-    private User map(ResultSet rs) throws SQLException {
+    private User parsUser(ResultSet rs) throws SQLException {
 
         return User.builder()
                 .id(rs.getLong("id"))

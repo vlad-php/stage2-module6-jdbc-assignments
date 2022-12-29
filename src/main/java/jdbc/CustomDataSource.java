@@ -5,6 +5,7 @@ import lombok.Setter;
 
 import javax.sql.DataSource;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -33,39 +34,17 @@ public class CustomDataSource implements DataSource {
     }
 
     public static CustomDataSource getInstance() {
-
-        if (instance == null) {
-
-            synchronized (MONITOR) {
-
-                if (instance == null) {
-
-                    try {
-
-                        Properties properties = new Properties();
-                        properties.load(
-                                CustomDataSource.class.getClassLoader().getResourceAsStream("app.properties")
-                        );
-
-                        instance = new CustomDataSource(
-                                properties.getProperty("postgres.driver"),
-                                properties.getProperty("postgres.url"),
-                                properties.getProperty("postgres.password"),
-                                properties.getProperty("postgres.name")
-                        );
-
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-
-                }
-
+        if(instance == null){
+            Properties properties = new Properties();
+            InputStream input = CustomDataSource.class.getClassLoader().getResourceAsStream("app.properties");
+            try {
+                properties.load(input);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
-
+            instance = new CustomDataSource(properties.getProperty("postgres.driver"),properties.getProperty("postgres.url"), properties.getProperty("postgres.password"), properties.getProperty("postgres.name"));
         }
-
         return instance;
-
     }
 
     @Override
