@@ -1,6 +1,5 @@
 package jdbc;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -11,155 +10,128 @@ import java.util.List;
 
 @Getter
 @Setter
-@AllArgsConstructor
 @NoArgsConstructor
 public class SimpleJDBCRepository {
 
-    private interface StatementFunction<S, R> {
-        R apply(S statement) throws SQLException;
-    }
-
-    private final CustomDataSource dataSource = CustomDataSource.getInstance();
-
-    private Connection connection = null;
+    private Connection connection = new CustomConnector().getConnection(CustomDataSource.getInstance().getUrl(), CustomDataSource.getInstance().getName(), CustomDataSource.getInstance().getPassword());
     private PreparedStatement ps = null;
     private Statement st = null;
+    public SimpleJDBCRepository(Connection connection, PreparedStatement ps, Statement st) {
+        CustomConnector customConnector = new CustomConnector();
+        CustomDataSource customDataSource = CustomDataSource.getInstance();
+        this.connection = customConnector.getConnection(customDataSource.getUrl(), customDataSource.getName(), customDataSource.getPassword());
+        this.ps = ps;
+        try {
+            this.st = connection.createStatement();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
-    private static final String CREATE_USER_SQL = """
+    private static final String createUserSQL = """
             INSERT INTO myusers(
             firstname, lastname, age)
             VALUES (?, ?, ?);
             """;
-    private static final String UPDATE_USER_SQL = """
+    private static final String updateUserSQL = """
             UPDATE myusers
             SET firstname=?, lastname=?, age=?
             WHERE id = ?
             """;
-    private static final String DELETE_USER = """
+    private static final String deleteUser = """
             DELETE FROM public.myusers
             WHERE id = ?
             """;
-    private static final String FIND_USER_BY_ID_SQL = """
+    private static final String findUserByIdSQL = """
             SELECT id, firstname, lastname, age FROM myusers
             WHERE id = ?
             """;
-    private static final String FIND_USER_BY_NAME_SQL = """
+    private static final String findUserByNameSQL = """
             SELECT id, firstname, lastname, age FROM myusers
             WHERE firstname LIKE CONCAT('%', ?, '%')
             """;
-    private static final String FIND_ALL_USER_SQL = """
+    private static final String findAllUserSQL = """
             SELECT id, firstname, lastname, age FROM myusers
             """;
 
-    private <T> T query(String sqlForStatement,
-                        StatementFunction<PreparedStatement, T> statementToResult,
-                        int... additionalConstants) {
-
-        try (var conn = dataSource.getConnection();
-             var statement = conn.prepareStatement(sqlForStatement, additionalConstants)) {
-            return statementToResult.apply(statement);
+    public Long createUser(User user) {
+        try {
+            ps = connection.prepareStatement(createUserSQL);
+            ps.setString(1, user.getFirstName());
+            ps.setString(2, user.getLastName());
+            ps.setInt(3, user.getAge());
+            ResultSet rs = ps.executeQuery();
+            return rs.next() ? rs.getLong(1) : null;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-
-    }
-
-    public Long createUser(User user) {
-
-        return query(
-                CREATE_USER_SQL,
-                statement -> {
-                    statement.setString(1, user.getFirstName());
-                    statement.setString(2, user.getLastName());
-                    statement.setInt(3, user.getAge());
-                    statement.execute();
-                    ResultSet generatedKeys = statement.getGeneratedKeys();
-                    return generatedKeys.next() ? generatedKeys.getLong(1) : null;
-                },
-                Statement.RETURN_GENERATED_KEYS
-        );
-
     }
 
     public User findUserById(Long userId) {
-
-        return query(
-                FIND_USER_BY_ID_SQL,
-                statement -> {
-                    statement.setLong(1, userId);
-                    ResultSet resultSet = statement.executeQuery();
-                    return resultSet.next() ? map(resultSet) : null;
-                }
-        );
-
+        try {
+            ps = connection.prepareStatement(findUserByIdSQL);
+            ps.setInt(1, Math.toIntExact(userId));
+            ResultSet rs = ps.executeQuery();
+            return rs.next() ? parsUser(rs) : null;
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public User findUserByName(String userName) {
-
-        return query(
-                FIND_USER_BY_NAME_SQL,
-                statement -> {
-                    statement.setString(1, userName);
-                    ResultSet resultSet = statement.executeQuery();
-                    return resultSet.next() ? map(resultSet) : null;
-                }
-        );
-
+        try {
+            ps = connection.prepareStatement(findUserByNameSQL);
+            ps.setString(1, userName);
+            ResultSet rs = ps.executeQuery();
+            return rs.next() ? parsUser(rs) : null;
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public List<User> findAllUser() {
-
-        return query(
-                FIND_ALL_USER_SQL,
-                statement -> {
-                    List<User> users = new ArrayList<>();
-                    ResultSet resultSet = statement.executeQuery();
-                    while (resultSet.next()) {
-                        users.add(map(resultSet));
-                    }
-                    return users;
-                }
-        );
-
+        List<User> users = new ArrayList<>();
+        try {
+            ps = connection.prepareStatement(findAllUserSQL);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                users.add(parsUser(rs));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return users;
     }
 
     public User updateUser(User user) {
-
-        return query(
-                UPDATE_USER_SQL,
-                statement -> {
-                    statement.setString(1, user.getFirstName());
-                    statement.setString(2, user.getLastName());
-                    statement.setInt(3, user.getAge());
-                    statement.setLong(4, user.getId());
-                    return statement.executeUpdate() != 0 ? findUserById(user.getId()) : null;
-                }
-        );
-
+        try {
+            ps = connection.prepareStatement(updateUserSQL);
+            ps.setString(1, user.getFirstName());
+            ps.setString(2, user.getLastName());
+            ps.setInt(3, user.getAge());
+            ps.setLong(4, user.getId());
+            return ps.executeUpdate() != 0 ? findUserById(user.getId()) : null;
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public void deleteUser(Long userId) {
-
-        query(
-                DELETE_USER,
-                statement -> {
-                    statement.setLong(1, userId);
-                    statement.executeUpdate();
-                    return null;
-                }
-        );
-
+        try {
+            ps = connection.prepareStatement(deleteUser);
+            ps.setInt(1, Math.toIntExact(userId));
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    private User map(ResultSet rs) throws SQLException {
-
+    private User parsUser(ResultSet rs) throws SQLException {
         return User.builder()
                 .id(rs.getLong("id"))
                 .firstName(rs.getString("firstname"))
                 .lastName(rs.getString("lastname"))
                 .age(rs.getInt("age"))
                 .build();
-
     }
-
 }
